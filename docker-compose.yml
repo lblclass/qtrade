@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: qtrade
+      POSTGRES_PASSWORD: qtrade
+      POSTGRES_DB: qtrade
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qtrade -d qtrade"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+
+  nats:
+    image: nats:2.10-alpine
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: ["-js", "-m", "8222"]
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      QTRADE_ADDR: ":8080"
+      QTRADE_ENV: "dev"
+      QTRADE_CORS_ORIGINS: "http://localhost:5173"
+      DATABASE_URL: "postgres://qtrade:qtrade@postgres:5432/qtrade?sslmode=disable"
+      REDIS_URL: "redis://redis:6379/0"
+      NATS_URL: "nats://nats:4222"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      nats:
+        condition: service_started
+
+  research:
+    build:
+      context: .
+      dockerfile: deployments/python/Dockerfile
+    profiles: ["research"]
+
+volumes:
+  pgdata:
+  redisdata:

@@ -1,0 +1,130 @@
+syntax = "proto3";
+
+package qtrade.v1;
+
+option go_package = "github.com/qtrade/qtrade/gen/go/qtrade/v1;qtradev1";
+
+import "google/protobuf/timestamp.proto";
+
+enum Side {
+  SIDE_UNSPECIFIED = 0;
+  SIDE_BUY = 1;
+  SIDE_SELL = 2;
+}
+
+enum OrderType {
+  ORDER_TYPE_UNSPECIFIED = 0;
+  ORDER_TYPE_MARKET = 1;
+  ORDER_TYPE_LIMIT = 2;
+}
+
+enum OrderStatus {
+  ORDER_STATUS_UNSPECIFIED = 0;
+  ORDER_STATUS_ACCEPTED = 1;
+  ORDER_STATUS_PARTIALLY_FILLED = 2;
+  ORDER_STATUS_FILLED = 3;
+  ORDER_STATUS_CANCELED = 4;
+  ORDER_STATUS_REJECTED = 5;
+}
+
+message OrderIntent {
+  string client_order_id = 1;
+  string deployment_id = 2;
+  string account_id = 3;
+  string symbol = 4;
+  Side side = 5;
+  OrderType order_type = 6;
+  int64 quantity = 7;
+  int64 price_cents = 8;
+  int64 last_price_cents = 9;
+  int64 limit_up_cents = 10;
+  int64 limit_down_cents = 11;
+}
+
+message Order {
+  string id = 1;
+  string client_order_id = 2;
+  string deployment_id = 3;
+  string account_id = 4;
+  string symbol = 5;
+  Side side = 6;
+  OrderType order_type = 7;
+  int64 quantity = 8;
+  int64 filled_quantity = 9;
+  int64 price_cents = 10;
+  OrderStatus status = 11;
+  string reject_reason = 12;
+  google.protobuf.Timestamp created_at = 13;
+  google.protobuf.Timestamp updated_at = 14;
+}
+
+message OrderAck {
+  string client_order_id = 1;
+  string order_id = 2;
+  OrderStatus status = 3;
+  repeated RiskViolation violations = 4;
+}
+
+message RiskViolation {
+  string code = 1;
+  string message = 2;
+}
+
+message Fill {
+  string id = 1;
+  string order_id = 2;
+  string symbol = 3;
+  Side side = 4;
+  int64 quantity = 5;
+  int64 price_cents = 6;
+  int64 commission_cents = 7;
+  int64 stamp_tax_cents = 8;
+  int64 transfer_fee_cents = 9;
+  google.protobuf.Timestamp filled_at = 10;
+}
+
+message Position {
+  string account_id = 1;
+  string symbol = 2;
+  int64 quantity = 3;
+  int64 available_quantity = 4;
+  int64 avg_cost_cents = 5;
+  int64 market_price_cents = 6;
+}
+
+message AccountSnapshot {
+  string account_id = 1;
+  int64 cash_cents = 2;
+  int64 equity_cents = 3;
+  string currency = 4;
+  repeated Position positions = 5;
+}
+
+message MarketEvent {
+  string symbol = 1;
+  string exchange = 2;
+  google.protobuf.Timestamp event_time = 3;
+  google.protobuf.Timestamp recv_time = 4;
+  int64 sequence = 5;
+  int64 last_price_cents = 6;
+  int64 volume = 7;
+  int64 amount_cents = 8;
+  int64 limit_up_cents = 9;
+  int64 limit_down_cents = 10;
+}
+
+message CancelOrderRequest {
+  string client_order_id = 1;
+  string deployment_id = 2;
+}
+
+message QueryAccountRequest {
+  string account_id = 1;
+}
+
+service ExecutionService {
+  rpc SubmitOrder(OrderIntent) returns (OrderAck);
+  rpc CancelOrder(CancelOrderRequest) returns (OrderAck);
+  rpc QueryAccount(QueryAccountRequest) returns (AccountSnapshot);
+}
+
