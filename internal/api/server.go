@@ -10,6 +10,7 @@ import (
 	"github.com/qtrade/qtrade/internal/broker"
 	"github.com/qtrade/qtrade/internal/config"
 	"github.com/qtrade/qtrade/internal/domain"
+	"github.com/qtrade/qtrade/internal/marketdata"
 	"github.com/qtrade/qtrade/internal/risk"
 	"github.com/qtrade/qtrade/internal/store"
 )
@@ -21,10 +22,11 @@ type Server struct {
 	risk    *risk.Engine
 	gateway broker.Gateway
 	config  config.Config
+	market  *marketdata.Provider
 }
 
 func New(st store.Store, riskEngine *risk.Engine, gateway broker.Gateway, logger *slog.Logger, cfg config.Config) http.Handler {
-	s := &Server{store: st, risk: riskEngine, gateway: gateway, config: cfg}
+	s := &Server{store: st, risk: riskEngine, gateway: gateway, config: cfg, market: marketdata.New(cfg.DataRoot)}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", s.health)
@@ -34,11 +36,19 @@ func New(st store.Store, riskEngine *risk.Engine, gateway broker.Gateway, logger
 	mux.HandleFunc("GET /api/v1/strategies", s.listStrategies)
 	mux.HandleFunc("POST /api/v1/strategies", s.createStrategy)
 	mux.HandleFunc("GET /api/v1/strategies/{id}", s.getStrategy)
+	mux.HandleFunc("PATCH /api/v1/strategies/{id}", s.updateStrategy)
+	mux.HandleFunc("POST /api/v1/strategies/{id}/simulate", s.simulateStrategy)
+	mux.HandleFunc("POST /api/v1/strategies/{id}/deploy", s.deployStrategy)
+	mux.HandleFunc("PATCH /api/v1/strategies/{id}/status", s.updateStrategyStatus)
 	mux.HandleFunc("POST /api/v1/strategies/{id}/versions", s.createStrategyVersion)
+	mux.HandleFunc("GET /api/v1/strategies/{id}/versions", s.listStrategyVersions)
 
 	mux.HandleFunc("GET /api/v1/backtests", s.listBacktests)
 	mux.HandleFunc("POST /api/v1/backtests", s.createBacktest)
 	mux.HandleFunc("GET /api/v1/backtests/{id}", s.getBacktest)
+	mux.HandleFunc("POST /api/v1/backtests/{id}/cancel", s.cancelBacktest)
+	mux.HandleFunc("POST /api/v1/backtests/{id}/claim", s.claimBacktest)
+	mux.HandleFunc("POST /api/v1/backtests/{id}/result", s.backtestResult)
 
 	mux.HandleFunc("GET /api/v1/live-deployments", s.listDeployments)
 	mux.HandleFunc("POST /api/v1/live-deployments", s.createDeployment)
@@ -46,11 +56,17 @@ func New(st store.Store, riskEngine *risk.Engine, gateway broker.Gateway, logger
 
 	mux.HandleFunc("GET /api/v1/orders", s.listOrders)
 	mux.HandleFunc("POST /api/v1/orders", s.createOrder)
+	mux.HandleFunc("POST /api/v1/orders/{id}/cancel", s.cancelOrder)
 	mux.HandleFunc("GET /api/v1/positions", s.listPositions)
 	mux.HandleFunc("GET /api/v1/accounts", s.listAccounts)
+	mux.HandleFunc("GET /api/v1/accounts/{id}/equity", s.accountEquity)
+	mux.HandleFunc("GET /api/v1/logs", s.listLogs)
 	mux.HandleFunc("GET /api/v1/risk/rules", s.getRiskRules)
 	mux.HandleFunc("GET /api/v1/audit-logs", s.listAuditLogs)
 	mux.HandleFunc("GET /api/v1/gateways", s.listGateways)
+	mux.HandleFunc("GET /api/v1/data/overview", s.dataOverview)
+	mux.HandleFunc("GET /api/v1/market/instruments", s.marketInstruments)
+	mux.HandleFunc("GET /api/v1/market/quotes", s.marketQuotes)
 	mux.HandleFunc("/", s.notFound)
 
 	return withRecover(logger, withRequestID(withLogging(logger, withCORS(cfg.CORSOrigins, mux))))

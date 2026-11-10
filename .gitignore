@@ -16,6 +16,10 @@ __pycache__/
 node_modules/
 dist/
 
+# Market data snapshots (regenerate with `make data-daily`)
+/data/
+/python/data/
+
 # Local config and secrets
 .env
 .env.*
@@ -30,4 +34,4 @@ dist/
 *.db
 *.sqlite
 *.log
-
+/logs/

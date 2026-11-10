@@ -1,0 +1,32 @@
+*** Begin Patch
+*** Update File: internal/domain/domain.go
+@@
+ type Strategy struct {
+@@
+ }
+ 
++func (s *Strategy) Transition(next StrategyStatus) error {
++	if next == s.Status {
++		return nil
++	}
++	allowed := map[StrategyStatus][]StrategyStatus{
++		StrategyDraft:       {StrategyBacktesting, StrategyRetired},
++		StrategyBacktesting: {StrategyReview, StrategyDraft, StrategyRetired},
++		StrategyReview:      {StrategyPaper, StrategyBacktesting, StrategyRetired},
++		StrategyPaper:       {StrategyCanary, StrategyLive, StrategyPaused, StrategyRetired},
++		StrategyCanary:      {StrategyLive, StrategyPaper, StrategyPaused, StrategyRetired},
++		StrategyLive:        {StrategyPaused, StrategyRetired},
++		StrategyPaused:      {StrategyLive, StrategyPaper, StrategyRetired},
++	}
++	for _, candidate := range allowed[s.Status] {
++		if candidate == next {
++			s.Status = next
++			s.UpdatedAt = time.Now().UTC()
++			return nil
++		}
++	}
++	return fmt.Errorf("cannot move strategy from %s to %s", s.Status, next)
++}
++
+ type StrategyVersion struct {
+*** End Patch

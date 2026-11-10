@@ -28,6 +28,31 @@ type Strategy struct {
 	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
+// Transition moves a strategy through its lifecycle. Every accepted edge is
+// explicit so the console cannot promote a strategy that skipped review.
+func (s *Strategy) Transition(next StrategyStatus) error {
+	if next == s.Status {
+		return nil
+	}
+	allowed := map[StrategyStatus][]StrategyStatus{
+		StrategyDraft:       {StrategyBacktesting, StrategyRetired},
+		StrategyBacktesting: {StrategyReview, StrategyDraft, StrategyRetired},
+		StrategyReview:      {StrategyPaper, StrategyBacktesting, StrategyRetired},
+		StrategyPaper:       {StrategyCanary, StrategyLive, StrategyPaused, StrategyRetired},
+		StrategyCanary:      {StrategyLive, StrategyPaper, StrategyPaused, StrategyRetired},
+		StrategyLive:        {StrategyPaused, StrategyRetired},
+		StrategyPaused:      {StrategyLive, StrategyPaper, StrategyRetired},
+	}
+	for _, candidate := range allowed[s.Status] {
+		if candidate == next {
+			s.Status = next
+			s.UpdatedAt = time.Now().UTC()
+			return nil
+		}
+	}
+	return fmt.Errorf("cannot move strategy from %s to %s", s.Status, next)
+}
+
 type StrategyVersion struct {
 	ID             string    `json:"id"`
 	StrategyID     string    `json:"strategy_id"`
@@ -230,4 +255,35 @@ func DefaultRiskLimits() RiskLimits {
 		StampTaxBPS:           50,
 		TransferFeeBPS:        1,
 	}
+}
+
+type LogLevel string
+
+const (
+	LogInfo  LogLevel = "info"
+	LogWarn  LogLevel = "warn"
+	LogError LogLevel = "error"
+)
+
+// LogEntry is a human-readable runtime line emitted by the control plane or a
+// worker. It is deliberately separate from AuditEvent: audit answers "who
+// changed what", logs answer "what did the strategy do at 09:31".
+type LogEntry struct {
+	ID           string    `json:"id"`
+	Level        LogLevel  `json:"level"`
+	Source       string    `json:"source"`
+	ResourceType string    `json:"resource_type"`
+	ResourceID   string    `json:"resource_id"`
+	Message      string    `json:"message"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+// EquityPoint is one day of mark-to-market account value.
+type EquityPoint struct {
+	Date             string `json:"date"`
+	EquityCents      int64  `json:"equity_cents"`
+	MarketValueCents int64  `json:"market_value_cents"`
+	CashCents        int64  `json:"cash_cents"`
+	PnLCents         int64  `json:"pnl_cents"`
+	PnLBPS           int64  `json:"pnl_bps"`
 }

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import argparse
 import json
 import random
-import sys
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
+from pathlib import Path
 
 from .backtest import BacktestConfig, BacktestEngine
+from .data.portal import SnapshotDataPortal
+from .data.store import DatasetStore
+from .data.symbols import parse_symbols
 from .domain import Bar
 from .strategies.momentum import MomentumStrategy
 
@@ -58,9 +62,34 @@ def _demo_bars(days: int = 40) -> list[Bar]:
     return bars
 
 
-def main() -> None:
-    if len(sys.argv) > 1 and sys.argv[1] not in ("demo", "backtest"):
-        raise SystemExit(f"unknown command: {sys.argv[1]}")
+def _parse_date(text: str) -> date:
+    if text == "today":
+        return date.today()
+    return datetime.strptime(text, "%Y-%m-%d").date()
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(prog="qtrade-demo", description="run a qtrade backtest")
+    parser.add_argument("command", nargs="?", default="demo", choices=("demo", "backtest"))
+    parser.add_argument("--snapshot", default="", help="snapshot store root, e.g. ../data")
+    parser.add_argument("--symbols", default="", help="comma separated symbols (snapshot mode)")
+    parser.add_argument("--start", default="2020-01-01")
+    parser.add_argument("--end", default="today")
+    parser.add_argument("--lookback", type=int, default=20)
+    parser.add_argument("--top-n", type=int, default=3)
+    parser.add_argument("--rebalance-every", type=int, default=10)
+    args = parser.parse_args(argv)
+
+    if args.snapshot:
+        if not args.symbols:
+            parser.error("--snapshot requires --symbols")
+        symbols = [symbol.key for symbol in parse_symbols(args.symbols)]
+        portal = SnapshotDataPortal(store=DatasetStore(Path(args.snapshot)))
+        bars = portal.bars(symbols, _parse_date(args.start), _parse_date(args.end))
+        if not bars:
+            parser.error(f"no bars found under {args.snapshot} for {symbols}")
+    else:
+        bars = _demo_bars()
 
     engine = BacktestEngine(
         BacktestConfig(
@@ -75,10 +104,16 @@ def main() -> None:
         )
     )
     result = engine.run(
-        MomentumStrategy(lookback=5, top_n=2, rebalance_every=5),
-        _demo_bars(),
+        MomentumStrategy(
+            lookback=args.lookback,
+            top_n=args.top_n,
+            rebalance_every=args.rebalance_every,
+        ),
+        bars,
     )
     output = {
+        "data": "snapshot" if args.snapshot else "synthetic",
+        "bars": len(bars),
         "metrics": result.metrics,
         "final_cash": str(result.final_cash),
         "final_equity": str(result.final_equity),
@@ -92,4 +127,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

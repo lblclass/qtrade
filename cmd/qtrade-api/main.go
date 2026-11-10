@@ -15,6 +15,7 @@ import (
 	"github.com/qtrade/qtrade/internal/config"
 	"github.com/qtrade/qtrade/internal/domain"
 	"github.com/qtrade/qtrade/internal/risk"
+	"github.com/qtrade/qtrade/internal/seed"
 	"github.com/qtrade/qtrade/internal/store"
 )
 
@@ -23,6 +24,13 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	memory := store.NewMemory()
+	if cfg.SeedDemo {
+		if err := seed.Demo(context.Background(), memory); err != nil {
+			logger.Error("demo seed failed", "error", err)
+		} else {
+			logger.Info("demo lifecycle seeded")
+		}
+	}
 	riskEngine := risk.NewEngine(domain.DefaultRiskLimits())
 	gateway := broker.Mock{}
 	handler := api.New(memory, riskEngine, gateway, logger, cfg)

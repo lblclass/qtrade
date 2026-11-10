@@ -23,11 +23,16 @@ type testServer struct {
 
 func newTestServer(t *testing.T) *testServer {
 	t.Helper()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	handler := api.New(store.NewMemory(), risk.NewEngine(domain.DefaultRiskLimits()), broker.Mock{}, logger, config.Config{
+	return newTestServerWithConfig(t, config.Config{
 		Environment: "test",
 		CORSOrigins: []string{"*"},
 	})
+}
+
+func newTestServerWithConfig(t *testing.T, cfg config.Config) *testServer {
+	t.Helper()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	handler := api.New(store.NewMemory(), risk.NewEngine(domain.DefaultRiskLimits()), broker.Mock{}, logger, cfg)
 	return &testServer{handler: handler}
 }
 

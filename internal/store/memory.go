@@ -15,6 +15,7 @@ type Memory struct {
 	strategies    map[string]domain.Strategy
 	strategyOrder []string
 	versions      map[string]domain.StrategyVersion
+	versionOrder  []string
 
 	backtests     map[string]domain.BacktestRun
 	backtestOrder []string
@@ -31,6 +32,7 @@ type Memory struct {
 	positions    map[string][]domain.Position
 
 	audits []domain.AuditEvent
+	logs   []domain.LogEntry
 }
 
 func NewMemory() *Memory {
@@ -85,6 +87,16 @@ func (m *Memory) GetStrategy(_ context.Context, strategyID string) (domain.Strat
 	return strategy, nil
 }
 
+func (m *Memory) UpdateStrategy(_ context.Context, strategy domain.Strategy) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.strategies[strategy.ID]; !ok {
+		return ErrNotFound
+	}
+	m.strategies[strategy.ID] = strategy
+	return nil
+}
+
 func (m *Memory) CreateStrategyVersion(_ context.Context, version domain.StrategyVersion) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -96,6 +108,7 @@ func (m *Memory) CreateStrategyVersion(_ context.Context, version domain.Strateg
 		return ErrConflict
 	}
 	m.versions[key] = version
+	m.versionOrder = append(m.versionOrder, key)
 	return nil
 }
 
@@ -107,6 +120,19 @@ func (m *Memory) GetStrategyVersion(_ context.Context, strategyID, version strin
 		return domain.StrategyVersion{}, ErrNotFound
 	}
 	return item, nil
+}
+
+func (m *Memory) ListStrategyVersions(_ context.Context, strategyID string) ([]domain.StrategyVersion, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]domain.StrategyVersion, 0)
+	for _, key := range m.versionOrder {
+		version := m.versions[key]
+		if version.StrategyID == strategyID {
+			out = append(out, version)
+		}
+	}
+	return out, nil
 }
 
 func (m *Memory) CreateBacktest(_ context.Context, run domain.BacktestRun) error {
@@ -138,6 +164,16 @@ func (m *Memory) ListBacktests(_ context.Context) ([]domain.BacktestRun, error) 
 		out = append(out, m.backtests[runID])
 	}
 	return out, nil
+}
+
+func (m *Memory) UpdateBacktest(_ context.Context, run domain.BacktestRun) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.backtests[run.ID]; !ok {
+		return ErrNotFound
+	}
+	m.backtests[run.ID] = run
+	return nil
 }
 
 func (m *Memory) CreateDeployment(_ context.Context, deployment domain.LiveDeployment) error {
@@ -193,6 +229,26 @@ func (m *Memory) CreateOrder(_ context.Context, order domain.Order) error {
 	return nil
 }
 
+func (m *Memory) GetOrder(_ context.Context, orderID string) (domain.Order, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	order, ok := m.orders[orderID]
+	if !ok {
+		return domain.Order{}, ErrNotFound
+	}
+	return order, nil
+}
+
+func (m *Memory) UpdateOrder(_ context.Context, order domain.Order) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.orders[order.ID]; !ok {
+		return ErrNotFound
+	}
+	m.orders[order.ID] = order
+	return nil
+}
+
 func (m *Memory) ListOrders(_ context.Context, deploymentID, accountID string) ([]domain.Order, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -237,6 +293,16 @@ func (m *Memory) ListAccounts(_ context.Context) ([]domain.Account, error) {
 	return out, nil
 }
 
+func (m *Memory) UpdateAccount(_ context.Context, account domain.Account) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.accounts[account.ID]; !ok {
+		return ErrNotFound
+	}
+	m.accounts[account.ID] = account
+	return nil
+}
+
 func (m *Memory) ListPositions(_ context.Context, accountID string) ([]domain.Position, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -248,6 +314,13 @@ func (m *Memory) ListPositions(_ context.Context, accountID string) ([]domain.Po
 		return out, nil
 	}
 	return append([]domain.Position(nil), m.positions[accountID]...), nil
+}
+
+func (m *Memory) ReplacePositions(_ context.Context, accountID string, positions []domain.Position) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.positions[accountID] = append([]domain.Position(nil), positions...)
+	return nil
 }
 
 func (m *Memory) AddAudit(_ context.Context, event domain.AuditEvent) error {
@@ -279,4 +352,44 @@ func (m *Memory) ListAudit(_ context.Context, limit int) ([]domain.AuditEvent, e
 
 func versionKey(strategyID, version string) string {
 	return strategyID + "@" + version
+}
+
+func (m *Memory) AddLog(_ context.Context, entry domain.LogEntry) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if entry.ID == "" {
+		entry.ID = id.New("log")
+	}
+	if entry.CreatedAt.IsZero() {
+		entry.CreatedAt = time.Now().UTC()
+	}
+	if entry.Level == "" {
+		entry.Level = domain.LogInfo
+	}
+	m.logs = append(m.logs, entry)
+	return nil
+}
+
+func (m *Memory) ListLogs(_ context.Context, resourceType, resourceID string, limit int) ([]domain.LogEntry, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	size := limit
+	if size <= 0 || size > len(m.logs) {
+		size = len(m.logs)
+	}
+	out := make([]domain.LogEntry, 0, size)
+	for i := len(m.logs) - 1; i >= 0; i-- {
+		entry := m.logs[i]
+		if resourceType != "" && entry.ResourceType != resourceType {
+			continue
+		}
+		if resourceID != "" && entry.ResourceID != resourceID {
+			continue
+		}
+		out = append(out, entry)
+		if limit > 0 && len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
 }

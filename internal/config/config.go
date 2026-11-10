@@ -11,6 +11,8 @@ type Config struct {
 	Environment     string
 	ShutdownTimeout time.Duration
 	CORSOrigins     []string
+	DataRoot        string
+	SeedDemo        bool
 }
 
 func Load() Config {
@@ -19,6 +21,20 @@ func Load() Config {
 		Environment:     env("QTRADE_ENV", "dev"),
 		ShutdownTimeout: durationEnv("QTRADE_SHUTDOWN_TIMEOUT", 10*time.Second),
 		CORSOrigins:     splitEnv("QTRADE_CORS_ORIGINS", "http://localhost:5173"),
+		DataRoot:        env("QTRADE_DATA_ROOT", "data"),
+		SeedDemo:        boolEnv("QTRADE_SEED_DEMO", false),
+	}
+}
+
+func boolEnv(key string, fallback bool) bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	switch value {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return fallback
 	}
 }
 

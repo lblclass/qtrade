@@ -1,0 +1,112 @@
+name: qtrade
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: qtrade-postgres
+    environment:
+      POSTGRES_USER: qtrade
+      POSTGRES_PASSWORD: qtrade
+      POSTGRES_DB: qtrade
+    ports:
+      - "15432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../../migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qtrade -d qtrade"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: qtrade-redis
+    ports:
+      - "16379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    restart: unless-stopped
+
+  nats:
+    image: nats:2.10-alpine
+    container_name: qtrade-nats
+    ports:
+      - "14222:4222"
+      - "18222:8222"
+    command: ["-js", "-m", "8222"]
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: qtrade-api
+    environment:
+      QTRADE_ADDR: ":8080"
+      QTRADE_ENV: "dev"
+      QTRADE_CORS_ORIGINS: "http://localhost:8090"
+      QTRADE_DATA_ROOT: "/data"
+      QTRADE_SEED_DEMO: "true"
+      DATABASE_URL: "postgres://qtrade:qtrade@postgres:5432/qtrade?sslmode=disable"
+      REDIS_URL: "redis://redis:6379/0"
+      NATS_URL: "nats://nats:4222"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../../data:/data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      nats:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: deployments/python/Dockerfile
+    container_name: qtrade-worker
+    command:
+      - python
+      - -m
+      - qtrade_research.worker
+      - --api
+      - http://api:8080
+      - --data
+      - /data
+      - --interval
+      - "5"
+    environment:
+      PYTHONPATH: "/app/src"
+    volumes:
+      - ../../data:/data:ro
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../..
+      dockerfile: deployments/local/web.Dockerfile
+    container_name: qtrade-web
+    ports:
+      - "8090:80"
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:

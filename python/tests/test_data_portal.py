@@ -4,7 +4,7 @@ import unittest
 from datetime import date, datetime
 from decimal import Decimal
 
-from qtrade_research.data import InMemoryDataPortal
+from qtrade_research.data import InMemoryDataPortal, SnapshotDataPortal
 from qtrade_research.domain import Bar
 
 
@@ -46,3 +46,35 @@ class TestInMemoryDataPortal(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
+class TestSnapshotDataPortal(unittest.TestCase):
+    def setUp(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        from qtrade_research.data.store import DatasetStore
+
+        self._tmp = tempfile.TemporaryDirectory()
+        self.store = DatasetStore(Path(self._tmp.name), prefer_csv=True)
+        self.store.append(
+            "bars_1d",
+            [bar("600000.SH", 2), bar("600000.SH", 3), bar("000001.SZ", 3)],
+            source="test",
+            frequency="1d",
+        )
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_bars_come_from_snapshot(self) -> None:
+        portal = SnapshotDataPortal(store=self.store)
+        result = portal.bars(["600000.SH"], date(2025, 1, 3), date(2025, 1, 3))
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].symbol, "600000.SH")
+
+    def test_instruments_fall_back_to_coverage(self) -> None:
+        portal = SnapshotDataPortal(store=self.store)
+        rows = portal.instruments(date(2025, 1, 3))
+        self.assertEqual([row["symbol"] for row in rows], ["000001.SZ", "600000.SH"])
+
+if __name__ == "__main__":
+    unittest.main()
