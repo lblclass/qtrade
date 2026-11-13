@@ -2,8 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
+
+	"github.com/qtrade/qtrade/internal/marketdata"
 )
 
 func (s *Server) dataOverview(w http.ResponseWriter, _ *http.Request) {
@@ -78,4 +81,23 @@ func queryLimit(r *http.Request, fallback, maximum int) int {
 		return maximum
 	}
 	return parsed
+}
+
+func (s *Server) marketSeries(w http.ResponseWriter, r *http.Request) {
+	symbol := r.PathValue("symbol")
+	days := queryLimit(r, 0, 2000)
+	data, err := s.market.SymbolSeries(symbol, days)
+	if err != nil {
+		status := http.StatusNotFound
+		code := "series_not_found"
+		message := "no chart series for this symbol"
+		if errors.Is(err, marketdata.ErrInvalidSymbol) {
+			status = http.StatusBadRequest
+			code = "invalid_symbol"
+			message = "symbol must look like 600519.SH"
+		}
+		writeError(w, status, code, message, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, data)
 }

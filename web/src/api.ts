@@ -251,6 +251,64 @@ export type DataOverview = {
   };
 };
 
+export type IPOType = "stock" | "bond";
+export type IPOSubscriptionStatus = "submitted" | "won" | "lost" | "paid" | "abandoned" | "rejected";
+
+export type IPOOffer = {
+  id: string;
+  code: string;
+  name: string;
+  type: IPOType;
+  market: string;
+  board: string;
+  issue_price_cents: number;
+  min_quantity: number;
+  max_quantity: number;
+  quota_quantity: number;
+  subscription_date: string;
+  listing_date?: string;
+  requires_market_value: boolean;
+  status: string;
+  note?: string;
+};
+
+export type IPOLimit = {
+  market: string;
+  label: string;
+  quota_quantity: number;
+  market_value_cents: number;
+  enabled: boolean;
+  note?: string;
+};
+
+export type IPOSubscription = {
+  id: string;
+  offer_id: string;
+  code: string;
+  name: string;
+  type: IPOType;
+  account_id: string;
+  quantity: number;
+  price_cents: number;
+  amount_cents: number;
+  allotted_quantity: number;
+  status: IPOSubscriptionStatus;
+  message?: string;
+  broker_request_id?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type IPOAdapter = {
+  name: string;
+  display: string;
+  mode: string;
+  status: string;
+  live_trading: boolean;
+  message: string;
+  requirement: string;
+};
+
 export type ListResponse<T> = { items: T[]; count: number };
 
 export type Violation = { code: string; message: string };
@@ -402,6 +460,23 @@ export const api = {
       `/api/v1/accounts/${accountId}/equity?days=${days}`,
     ),
   gateways: () => get<ListResponse<GatewayHealth>>("/api/v1/gateways"),
+
+  ipoOffers: (accountId?: string) =>
+    get<ListResponse<IPOOffer>>(
+      `/api/v1/ipo/offers${accountId ? `?account_id=${encodeURIComponent(accountId)}` : ""}`,
+    ),
+  ipoLimits: (accountId: string) =>
+    get<ListResponse<IPOLimit>>(`/api/v1/ipo/limits?account_id=${encodeURIComponent(accountId)}`),
+  ipoSubscriptions: (accountId?: string) =>
+    get<ListResponse<IPOSubscription>>(
+      `/api/v1/ipo/subscriptions${accountId ? `?account_id=${encodeURIComponent(accountId)}` : ""}`,
+    ),
+  ipoSubscribe: (body: { account_id: string; offer_id: string; quantity: number; client_request_id: string }) =>
+    post<IPOSubscription>("/api/v1/ipo/subscriptions", body),
+  ipoSettle: (id: string) => post<IPOSubscription>(`/api/v1/ipo/subscriptions/${id}/settle`),
+  ipoPay: (id: string) => post<IPOSubscription>(`/api/v1/ipo/subscriptions/${id}/pay`),
+  ipoAbandon: (id: string) => post<IPOSubscription>(`/api/v1/ipo/subscriptions/${id}/abandon`),
+  ipoAdapters: () => get<ListResponse<IPOAdapter>>("/api/v1/ipo/adapters"),
 
   dataOverview: () => get<DataOverview>("/api/v1/data/overview"),
   instruments: (q: string, limit = 30) =>

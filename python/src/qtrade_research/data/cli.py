@@ -70,14 +70,20 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_store_args(daily)
     _add_universe_args(daily)
     daily.add_argument("--source", default="eastmoney", choices=sorted(SOURCES))
-    daily.add_argument("--start", default="2020-01-01")
+    daily.add_argument("--start", default="1990-01-01")
     daily.add_argument("--end", default="today")
     daily.add_argument("--adjust", default="qfq", choices=("none", "qfq", "hfq"))
     daily.add_argument("--limit", type=int, default=0)
     daily.add_argument("--workers", type=int, default=1)
     daily.add_argument("--rate", type=float, default=0.25, help="min seconds between HTTP requests")
     daily.add_argument("--incremental", action="store_true", default=True)
+    daily.add_argument(
+        "--backfill",
+        action="store_true",
+        help="refetch history before the stored coverage start (one-off full history)",
+    )
     daily.add_argument("--full-refresh", dest="incremental", action="store_false")
+    daily.add_argument("--dataset", default="", help="override the lake dataset name")
     daily.add_argument("--json", action="store_true")
 
     minute = sub.add_parser("minute", help="collect intraday bars")
@@ -283,6 +289,8 @@ def _collect(args: argparse.Namespace, *, frequency: str, interval: int | None) 
         interval=interval,
         adjust=args.adjust,
         incremental=args.incremental,
+        backfill=bool(getattr(args, "backfill", False)),
+        dataset_name=(getattr(args, "dataset", "") or None),
         save_raw=True,
         workers=workers,
     )

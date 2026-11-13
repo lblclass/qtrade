@@ -287,3 +287,72 @@ type EquityPoint struct {
 	PnLCents         int64  `json:"pnl_cents"`
 	PnLBPS           int64  `json:"pnl_bps"`
 }
+
+type IPOType string
+
+const (
+	IPOStock IPOType = "stock"
+	IPOBond  IPOType = "bond"
+)
+
+// IPOOffer is one subscribable new issue. Subscribing to a new listing is not
+// a normal order: the exchange assigns its own subscription code, the price is
+// fixed by the issuer, and the quantity is capped by the investor's holding
+// quota (new stocks) or by a flat per-account ceiling (convertible bonds).
+type IPOOffer struct {
+	ID                  string  `json:"id"`
+	Code                string  `json:"code"`
+	Name                string  `json:"name"`
+	Type                IPOType `json:"type"`
+	Market              string  `json:"market"`
+	Board               string  `json:"board"`
+	IssuePriceCents     int64   `json:"issue_price_cents"`
+	MinQuantity         int64   `json:"min_quantity"`
+	MaxQuantity         int64   `json:"max_quantity"`
+	QuotaQuantity       int64   `json:"quota_quantity"`
+	SubscriptionDate    string  `json:"subscription_date"`
+	ListingDate         string  `json:"listing_date,omitempty"`
+	RequiresMarketValue bool    `json:"requires_market_value"`
+	Status              string  `json:"status"`
+	Note                string  `json:"note,omitempty"`
+}
+
+// IPOLimit is the per-market subscription ceiling derived from the account's
+// average daily holding market value over the previous 20 trading days.
+type IPOLimit struct {
+	Market           string `json:"market"`
+	Label            string `json:"label"`
+	QuotaQuantity    int64  `json:"quota_quantity"`
+	MarketValueCents int64  `json:"market_value_cents"`
+	Enabled          bool   `json:"enabled"`
+	Note             string `json:"note,omitempty"`
+}
+
+type IPOSubscriptionStatus string
+
+const (
+	IPOSubmitted IPOSubscriptionStatus = "submitted"
+	IPOWon       IPOSubscriptionStatus = "won"
+	IPOLost      IPOSubscriptionStatus = "lost"
+	IPOPaid      IPOSubscriptionStatus = "paid"
+	IPOAbandoned IPOSubscriptionStatus = "abandoned"
+	IPORejected  IPOSubscriptionStatus = "rejected"
+)
+
+type IPOSubscription struct {
+	ID               string                `json:"id"`
+	OfferID          string                `json:"offer_id"`
+	Code             string                `json:"code"`
+	Name             string                `json:"name"`
+	Type             IPOType               `json:"type"`
+	AccountID        string                `json:"account_id"`
+	Quantity         int64                 `json:"quantity"`
+	PriceCents       int64                 `json:"price_cents"`
+	AmountCents      int64                 `json:"amount_cents"`
+	AllottedQuantity int64                 `json:"allotted_quantity"`
+	Status           IPOSubscriptionStatus `json:"status"`
+	Message          string                `json:"message,omitempty"`
+	BrokerRequestID  string                `json:"broker_request_id,omitempty"`
+	CreatedAt        time.Time             `json:"created_at"`
+	UpdatedAt        time.Time             `json:"updated_at"`
+}

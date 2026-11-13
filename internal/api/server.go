@@ -18,15 +18,21 @@ import (
 const APIVersion = "v1"
 
 type Server struct {
-	store   store.Store
-	risk    *risk.Engine
-	gateway broker.Gateway
-	config  config.Config
-	market  *marketdata.Provider
+	store    store.Store
+	risk     *risk.Engine
+	gateway  broker.Gateway
+	ipo      broker.IPOAdapter
+	channels []broker.IPOAdapter
+	config   config.Config
+	market   *marketdata.Provider
 }
 
-func New(st store.Store, riskEngine *risk.Engine, gateway broker.Gateway, logger *slog.Logger, cfg config.Config) http.Handler {
-	s := &Server{store: st, risk: riskEngine, gateway: gateway, config: cfg, market: marketdata.New(cfg.DataRoot)}
+func New(st store.Store, riskEngine *risk.Engine, gateway broker.Gateway, ipo broker.IPOAdapter, logger *slog.Logger, cfg config.Config) http.Handler {
+	s := &Server{
+		store: st, risk: riskEngine, gateway: gateway, ipo: ipo,
+		channels: []broker.IPOAdapter{ipo, broker.NewQMTIPO(""), broker.NewPtradeIPO("")},
+		config:   cfg, market: marketdata.New(cfg.DataRoot),
+	}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", s.health)
@@ -64,9 +70,19 @@ func New(st store.Store, riskEngine *risk.Engine, gateway broker.Gateway, logger
 	mux.HandleFunc("GET /api/v1/risk/rules", s.getRiskRules)
 	mux.HandleFunc("GET /api/v1/audit-logs", s.listAuditLogs)
 	mux.HandleFunc("GET /api/v1/gateways", s.listGateways)
+	mux.HandleFunc("GET /api/v1/ipo/offers", s.listIPOOffers)
+	mux.HandleFunc("GET /api/v1/ipo/limits", s.ipoLimits)
+	mux.HandleFunc("GET /api/v1/ipo/subscriptions", s.listIPOSubscriptions)
+	mux.HandleFunc("POST /api/v1/ipo/subscriptions", s.createIPOSubscription)
+	mux.HandleFunc("POST /api/v1/ipo/subscriptions/{id}/settle", s.settleIPOSubscription)
+	mux.HandleFunc("POST /api/v1/ipo/subscriptions/{id}/pay", s.payIPOSubscription)
+	mux.HandleFunc("POST /api/v1/ipo/subscriptions/{id}/abandon", s.abandonIPOSubscription)
+	mux.HandleFunc("GET /api/v1/ipo/adapters", s.listIPOAdapters)
+
 	mux.HandleFunc("GET /api/v1/data/overview", s.dataOverview)
 	mux.HandleFunc("GET /api/v1/market/instruments", s.marketInstruments)
 	mux.HandleFunc("GET /api/v1/market/quotes", s.marketQuotes)
+	mux.HandleFunc("GET /api/v1/market/series/{symbol}", s.marketSeries)
 	mux.HandleFunc("/", s.notFound)
 
 	return withRecover(logger, withRequestID(withLogging(logger, withCORS(cfg.CORSOrigins, mux))))

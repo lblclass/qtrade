@@ -78,7 +78,7 @@ class SnapshotDataPortal:
         if snapshot_id is not None and self.snapshot_id and snapshot_id != self.snapshot_id:
             raise ValueError(f"snapshot {snapshot_id} is not available")
         if frequency == "1d":
-            dataset, interval = "bars_1d", None
+            dataset, interval = self.dataset, None
         elif frequency == "1m":
             dataset, interval = "bars_1m", self.interval
         else:

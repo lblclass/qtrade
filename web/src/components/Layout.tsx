@@ -26,6 +26,7 @@ const NAV: NavGroup[] = [
     label: "交易执行",
     items: [
       { path: "/trading", label: "交易台", icon: "trade", hint: "下单与持仓" },
+      { path: "/ipo", label: "打新中心", icon: "flask", hint: "新股与新债申购" },
       { path: "/risk", label: "风险控制", icon: "risk", hint: "限额与拒单" },
     ],
   },
@@ -44,6 +45,7 @@ const TITLES: Record<string, string> = {
   backtests: "回测中心",
   deployments: "部署管理",
   trading: "交易台",
+  ipo: "打新中心",
   risk: "风险控制",
   monitoring: "监控与审计",
 };

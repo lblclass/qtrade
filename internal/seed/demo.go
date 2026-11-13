@@ -238,6 +238,40 @@ func Demo(ctx context.Context, st store.Store) error {
 			return err
 		}
 	}
+	dateAt := func(days int) string { return time.Now().AddDate(0, 0, days).Format("2006-01-02") }
+	offers := []domain.IPOOffer{
+		{ID: "ipo_offer_787981", Code: "787981", Name: "昂瑞微电子", Type: domain.IPOStock, Market: "SH", Board: "科创板", IssuePriceCents: 3_260, MinQuantity: 500, MaxQuantity: 6_000, SubscriptionDate: dateAt(0), ListingDate: dateAt(10), RequiresMarketValue: true, Status: "open", Note: "科创板新股，需已开通科创板交易权限"},
+		{ID: "ipo_offer_301999", Code: "301999", Name: "云汉芯城", Type: domain.IPOStock, Market: "SZ", Board: "创业板", IssuePriceCents: 2_180, MinQuantity: 500, MaxQuantity: 11_000, SubscriptionDate: dateAt(0), ListingDate: dateAt(9), RequiresMarketValue: true, Status: "open", Note: "创业板新股，需已开通创业板交易权限"},
+		{ID: "ipo_offer_733111", Code: "733111", Name: "兴业转债", Type: domain.IPOBond, Market: "SH", Board: "主板", IssuePriceCents: 10_000, MinQuantity: 10, MaxQuantity: 100_000, SubscriptionDate: dateAt(0), ListingDate: dateAt(14), RequiresMarketValue: false, Status: "open", Note: "沪市可转债，无需市值，顶格 10 万张"},
+		{ID: "ipo_offer_072111", Code: "072111", Name: "隆22转债", Type: domain.IPOBond, Market: "SZ", Board: "主板", IssuePriceCents: 10_000, MinQuantity: 10, MaxQuantity: 1_000_000, SubscriptionDate: dateAt(0), ListingDate: dateAt(15), RequiresMarketValue: false, Status: "open", Note: "深市可转债，无需市值，单账户上限 100 万张"},
+		{ID: "ipo_offer_732999", Code: "732999", Name: "华电新能", Type: domain.IPOStock, Market: "SH", Board: "主板", IssuePriceCents: 388, MinQuantity: 1_000, MaxQuantity: 31_000, SubscriptionDate: dateAt(-5), ListingDate: dateAt(2), RequiresMarketValue: true, Status: "closed", Note: "申购已截止，等待上市"},
+		{ID: "ipo_offer_072998", Code: "072998", Name: "山路转债", Type: domain.IPOBond, Market: "SZ", Board: "主板", IssuePriceCents: 10_000, MinQuantity: 10, MaxQuantity: 1_000_000, SubscriptionDate: dateAt(-12), ListingDate: dateAt(-5), RequiresMarketValue: false, Status: "listed", Note: "已上市"},
+	}
+	for _, offer := range offers {
+		if err := st.UpsertIPOOffer(ctx, offer); err != nil {
+			return err
+		}
+	}
+	subscriptions := []domain.IPOSubscription{
+		{ID: "ipo_sub_demo_0001", OfferID: "ipo_offer_732999", Code: "732999", Name: "华电新能", Type: domain.IPOStock, AccountID: demoAccountID, Quantity: 12_000, PriceCents: 388, AmountCents: 4_656_000, AllottedQuantity: 1_000, Status: domain.IPOWon, Message: "中签 1,000 股，请于 T+2 日 16:00 前保证资金充足", BrokerRequestID: "sbxipo_demo_0001", CreatedAt: at(5), UpdatedAt: at(4)},
+		{ID: "ipo_sub_demo_0002", OfferID: "ipo_offer_072998", Code: "072998", Name: "山路转债", Type: domain.IPOBond, AccountID: demoAccountID, Quantity: 10_000, PriceCents: 10_000, AmountCents: 10_000_000, AllottedQuantity: 0, Status: domain.IPOLost, Message: "未中签，冻结资金已解冻", BrokerRequestID: "sbxipo_demo_0002", CreatedAt: at(12), UpdatedAt: at(11)},
+		{ID: "ipo_sub_demo_0003", OfferID: "ipo_offer_072998", Code: "072998", Name: "山路转债", Type: domain.IPOBond, AccountID: demoAccountID, Quantity: 10_000, PriceCents: 10_000, AmountCents: 10_000_000, AllottedQuantity: 10, Status: domain.IPOPaid, Message: "已缴款，等待上市", BrokerRequestID: "sbxipo_demo_0003", CreatedAt: at(30), UpdatedAt: at(28)},
+	}
+	for _, subscription := range subscriptions {
+		if err := st.CreateIPOSubscription(ctx, subscription); err != nil {
+			return err
+		}
+		if err := st.AddAudit(ctx, domain.AuditEvent{
+			Actor:        "ipo-seed",
+			Action:       "ipo.subscribed",
+			ResourceType: "ipo_subscription",
+			ResourceID:   subscription.ID,
+			Detail:       subscription.Code + " " + subscription.Name,
+			CreatedAt:    subscription.CreatedAt,
+		}); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

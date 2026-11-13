@@ -73,6 +73,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("command", nargs="?", default="demo", choices=("demo", "backtest"))
     parser.add_argument("--snapshot", default="", help="snapshot store root, e.g. ../data")
     parser.add_argument("--symbols", default="", help="comma separated symbols (snapshot mode)")
+    parser.add_argument("--dataset", default="bars_1d", help="bars_1d for quotes, bars_1d_hfq for backtests")
     parser.add_argument("--start", default="2020-01-01")
     parser.add_argument("--end", default="today")
     parser.add_argument("--lookback", type=int, default=20)
@@ -84,7 +85,7 @@ def main(argv: list[str] | None = None) -> None:
         if not args.symbols:
             parser.error("--snapshot requires --symbols")
         symbols = [symbol.key for symbol in parse_symbols(args.symbols)]
-        portal = SnapshotDataPortal(store=DatasetStore(Path(args.snapshot)))
+        portal = SnapshotDataPortal(store=DatasetStore(Path(args.snapshot)), dataset=args.dataset)
         bars = portal.bars(symbols, _parse_date(args.start), _parse_date(args.end))
         if not bars:
             parser.error(f"no bars found under {args.snapshot} for {symbols}")

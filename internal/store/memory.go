@@ -31,6 +31,11 @@ type Memory struct {
 	accountOrder []string
 	positions    map[string][]domain.Position
 
+	ipoOffers     map[string]domain.IPOOffer
+	ipoOfferOrder []string
+	ipoSubs       map[string]domain.IPOSubscription
+	ipoSubOrder   []string
+
 	audits []domain.AuditEvent
 	logs   []domain.LogEntry
 }
@@ -53,6 +58,8 @@ func NewMemory() *Memory {
 		accounts:       map[string]domain.Account{account.ID: account},
 		accountOrder:   []string{account.ID},
 		positions:      make(map[string][]domain.Position),
+		ipoOffers:      make(map[string]domain.IPOOffer),
+		ipoSubs:        make(map[string]domain.IPOSubscription),
 	}
 }
 
@@ -392,4 +399,78 @@ func (m *Memory) ListLogs(_ context.Context, resourceType, resourceID string, li
 		}
 	}
 	return out, nil
+}
+func (m *Memory) ListIPOOffers(_ context.Context) ([]domain.IPOOffer, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]domain.IPOOffer, 0, len(m.ipoOfferOrder))
+	for _, offerID := range m.ipoOfferOrder {
+		out = append(out, m.ipoOffers[offerID])
+	}
+	return out, nil
+}
+
+func (m *Memory) GetIPOOffer(_ context.Context, offerID string) (domain.IPOOffer, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	offer, ok := m.ipoOffers[offerID]
+	if !ok {
+		return domain.IPOOffer{}, ErrNotFound
+	}
+	return offer, nil
+}
+
+func (m *Memory) UpsertIPOOffer(_ context.Context, offer domain.IPOOffer) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, exists := m.ipoOffers[offer.ID]; !exists {
+		m.ipoOfferOrder = append(m.ipoOfferOrder, offer.ID)
+	}
+	m.ipoOffers[offer.ID] = offer
+	return nil
+}
+
+func (m *Memory) ListIPOSubscriptions(_ context.Context, accountID string) ([]domain.IPOSubscription, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]domain.IPOSubscription, 0, len(m.ipoSubOrder))
+	for _, subscriptionID := range m.ipoSubOrder {
+		subscription := m.ipoSubs[subscriptionID]
+		if accountID != "" && subscription.AccountID != accountID {
+			continue
+		}
+		out = append(out, subscription)
+	}
+	return out, nil
+}
+
+func (m *Memory) GetIPOSubscription(_ context.Context, subscriptionID string) (domain.IPOSubscription, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	subscription, ok := m.ipoSubs[subscriptionID]
+	if !ok {
+		return domain.IPOSubscription{}, ErrNotFound
+	}
+	return subscription, nil
+}
+
+func (m *Memory) CreateIPOSubscription(_ context.Context, subscription domain.IPOSubscription) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, exists := m.ipoSubs[subscription.ID]; exists {
+		return ErrConflict
+	}
+	m.ipoSubs[subscription.ID] = subscription
+	m.ipoSubOrder = append(m.ipoSubOrder, subscription.ID)
+	return nil
+}
+
+func (m *Memory) UpdateIPOSubscription(_ context.Context, subscription domain.IPOSubscription) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.ipoSubs[subscription.ID]; !ok {
+		return ErrNotFound
+	}
+	m.ipoSubs[subscription.ID] = subscription
+	return nil
 }

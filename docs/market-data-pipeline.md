@@ -147,3 +147,82 @@ Linux：
 5. 北交所标的在 BaoStock 支持有限，分钟数据以东方财富当日快照为主。
 6. 未接入财务数据、指数成分、停牌/ST 标记；`0002_market_data.sql` 中对应表保持空置。
 7. 采集是进程式的，没有常驻调度器；用系统计划任务驱动即可，失败会体现在 manifest、日志与退出码。
+## 8. 全历史回补与双数据集（2026-11-13）
+
+### 8.1 数据到底从哪来
+
+日线**没有**经过 AKShare / Tushare / Baostock 的封装，而是直接调用公开行情接口：
+
+| 用途 | 来源 | 说明 |
+| --- | --- | --- |
+| 日线（日常增量） | 东方财富 `push2his` | 全历史，单次最多 10 万根；高频请求会触发连接重置 |
+| 日线（全历史回补） | 雪球 `stock.xueqiu.com/v5/stock/chart/kline.json` | 一次返回最多 1 万根，覆盖全部 A 股上市以来；需要匿名 Cookie |
+| 5/15/30/60 分钟历史 | BaoStock | 免费、单连接，2020 年起；每标的 10~40 秒，只适合回补 |
+| 1 分钟当日快照 | 东方财富 | 仅当日 240 根，逐日累积 |
+| 证券主数据 | 东方财富 `clist` | 5,900+ 只在市标的 |
+
+AKShare 本身就是这些接口的封装，直接调用少一层依赖、也方便控制限流；Tushare 需要积分/Token，
+本仓库尚未接入。
+
+### 8.2 为什么原来只有近 5 年
+
+`qtrade-data daily --start` 的默认值是 `2020-01-01`，而且增量模式只用 catalog 里的
+`end` 向后追加，**从不向左补**。数据源本身有全历史，是采集窗口把数据截断了。
+
+现在：
+
+* `--start` 默认改为 `1990-01-01`；
+* 新增 `--backfill`：当 catalog 里的覆盖起点晚于请求起点时，从请求起点重新拉一遍，
+  按 `(symbol, year)` 分区合并，已有年份覆盖、缺失年份补齐，可反复执行；
+* 新增 `--dataset`：把同一份采集写到不同的湖内数据集。
+
+### 8.3 两个日线数据集
+
+| 数据集 | 复权 | 用途 |
+| --- | --- | --- |
+| `bars_1d` | 不复权（`none`） | 控制台报价、涨跌停、PostgreSQL `bar_1d` |
+| `bars_1d_hfq` | 后复权（`hfq`） | 回测、因子、跨除权日收益 |
+
+**为什么不用前复权**：前复权对高分红老股会算出负价。实测 `600000.SH` 的 6,427 根前复权日线里
+有 1,914 根（1999-11 ~ 2012-12）价格 ≤ 0，质量门禁会直接丢弃，等于又丢回十年历史。
+后复权价格恒为正、跨除权连续，是做长周期回测的正确口径；不复权则用于展示真实成交价。
+
+回测时显式指定数据集：
+
+```bash
+PYTHONPATH=python/src python -m qtrade_research.cli backtest \
+  --snapshot data --dataset bars_1d_hfq --symbols 600000.SH,000001.SZ \
+  --start 2005-01-01
+```
+
+### 8.4 全历史回补命令
+
+```bash
+# 不复权全历史（展示 + 落库）
+PYTHONPATH=python/src python -m qtrade_research.data.cli daily \
+  --source xueqiu --dataset bars_1d --adjust none \
+  --universe-file logs/universe.txt --start 1990-01-01 --backfill \
+  --workers 6 --rate 0.05 --out data
+
+# 后复权全历史（回测）
+PYTHONPATH=python/src python -m qtrade_research.data.cli daily \
+  --source xueqiu --dataset bars_1d_hfq --adjust hfq \
+  --universe-file logs/universe.txt --start 1990-01-01 --backfill \
+  --workers 6 --rate 0.05 --out data
+```
+
+`--backfill` 可以重复执行：已经覆盖到的年份不会重复下载（命中起点后直接跳过）。
+
+### 8.5 本次回补结果
+
+* 日线：18,189,321 根，5,928 只标的，覆盖 **1990-12-19 ~ 2026-11-13**；
+* PostgreSQL `bar_1d`：18,189,346 行（不复权，按主键覆盖旧数据）；
+* 失败标的：0（首轮 798 只因单根脏数据整只失败，已改为跳过脏行并重跑）。
+
+### 8.6 已知限制
+
+1. 证券主数据只有**在市**标的（5,928 只），退市股不在其中；做长周期回测仍有生存者偏差，
+   需要补退市清单后单独回补。
+2. 复权因子尚未落到 `adj_factor` / `corporate_action`，跨除权日的涨跌停判断仍有噪音。
+3. 雪球是公开接口，没有商用授权；正式生产建议换成持牌数据源（Tushare Pro / Wind / 券商行情）。
+4. 夜间任务现在会同时维护 `bars_1d`（不复权）和 `bars_1d_hfq`（后复权）两份增量。

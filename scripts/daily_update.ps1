@@ -35,7 +35,7 @@ function Write-Log([string]$message) {
     Add-Content -LiteralPath $log -Value $line -Encoding UTF8
 }
 
-function Invoke-Step([string]$name, [string[]]$arguments) {
+function Invoke-Step([string]$name, [string[]]$arguments, [switch]$Optional) {
     Write-Log "START $name"
     $previous = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
@@ -43,7 +43,10 @@ function Invoke-Step([string]$name, [string[]]$arguments) {
     $code = $LASTEXITCODE
     $ErrorActionPreference = $previous
     foreach ($line in $output) { Write-Log "  $line" }
-    if ($code -ne 0) { throw "$name failed with exit code $code" }
+    if ($code -ne 0) {
+        if ($Optional) { Write-Log "WARN $name failed with exit code $code (non-fatal)"; return }
+        throw "$name failed with exit code $code"
+    }
     Write-Log "DONE $name"
 }
 
@@ -52,7 +55,7 @@ try {
 
     Invoke-Step "instruments" @(
         "-m", "qtrade_research.data.cli", "instruments", "--out", $data, "--json"
-    )
+    ) -Optional
 
     $latest = Get-ChildItem (Join-Path $data "instruments") -Directory | Sort-Object Name | Select-Object -Last 1
     if (-not $latest) { throw "no instrument snapshot found" }
@@ -66,7 +69,17 @@ try {
     Invoke-Step "daily bars" @(
         "-m", "qtrade_research.data.cli", "daily",
         "--universe-file", $symbolsFile,
-        "--start", "2020-01-01", "--incremental",
+        "--start", "1990-01-01", "--incremental",
+        "--adjust", "none", "--dataset", "bars_1d",
+        "--workers", "$Workers", "--rate", "$Rate",
+        "--quiet", "--json", "--out", $data
+    )
+
+    Invoke-Step "daily bars (hfq)" @(
+        "-m", "qtrade_research.data.cli", "daily",
+        "--universe-file", $symbolsFile,
+        "--start", "1990-01-01", "--incremental",
+        "--adjust", "hfq", "--dataset", "bars_1d_hfq",
         "--workers", "$Workers", "--rate", "$Rate",
         "--quiet", "--json", "--out", $data
     )
@@ -77,7 +90,7 @@ try {
         "--interval", "1", "--today", "--incremental",
         "--workers", "$Workers", "--rate", "$Rate",
         "--quiet", "--json", "--out", $data
-    )
+    ) -Optional
 
     $since = (Get-Date).AddDays(-1 * $LoadSinceDays).ToString("yyyy-MM-dd")
     Invoke-Step "load postgres" @(

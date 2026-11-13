@@ -8,6 +8,7 @@ import { StrategiesPage, StrategyDetailPage } from "./pages/Strategies";
 import { BacktestsPage, BacktestDetailPage } from "./pages/Backtests";
 import { DeploymentsPage } from "./pages/Deployments";
 import { TradingPage } from "./pages/Trading";
+import { IPOPage } from "./pages/IPO";
 import { RiskPage } from "./pages/Risk";
 import { MonitoringPage } from "./pages/Monitoring";
 
@@ -68,6 +69,8 @@ export default function App() {
         onNavigate={navigate}
       />
     );
+  } else if (section === "ipo") {
+    page = <IPOPage onNavigate={navigate} />;
   } else if (section === "risk") {
     page = <RiskPage onNavigate={navigate} />;
   } else if (section === "monitoring") {

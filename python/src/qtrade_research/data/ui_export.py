@@ -23,7 +23,8 @@ from typing import Any
 from .store import DatasetStore
 
 DATASET_LABELS = {
-    "bars_1d": ("日线", "1d", None),
+    "bars_1d": ("日线（不复权）", "1d", None),
+    "bars_1d_hfq": ("日线（后复权）", "1d", None),
     "bars_1m:1": ("1 分钟", "1m", 1),
     "bars_1m:5": ("5 分钟", "1m", 5),
 }
@@ -388,6 +389,66 @@ def _series_from_parquet(
         },
     }
 
+def _symbol_series_files(
+    root: Path, names: dict[str, str], *, days: int = 250
+) -> int:
+    """Write ``ui/series/<symbol>.json`` for every symbol.
+
+    The console has to chart any stock the user searches, not just the 300 most
+    active names in ``_series.json``. One small file per symbol keeps the API
+    read cheap and lets it cache per symbol instead of loading the universe.
+    """
+    try:
+        import pyarrow.parquet as pq
+    except ModuleNotFoundError:
+        return 0
+
+    base = root / "dataset" / "bars_1d"
+    if not base.exists():
+        return 0
+    out = root / "ui" / "series"
+    out.mkdir(parents=True, exist_ok=True)
+    written = 0
+
+    for symbol_dir in sorted(base.glob("symbol=*")):
+        symbol = symbol_dir.name.split("=", 1)[1]
+        paths = sorted(symbol_dir.glob("year=*/data.parquet"))[-2:]
+        rows: list[dict[str, Any]] = []
+        for path in paths:
+            table = pq.read_table(
+                path,
+                columns=[
+                    "ts", "open", "high", "low", "close",
+                    "volume", "limit_up", "limit_down",
+                ],
+            )
+            rows.extend(table.to_pylist())
+        if not rows:
+            continue
+        rows.sort(key=lambda item: item["ts"])
+        rows = rows[-days:]
+        payload = {
+            "symbol": symbol,
+            "name": names.get(symbol, symbol),
+            "days": len(rows),
+            "dates": [
+                _iso(item["ts"].date() if hasattr(item["ts"], "date") else item["ts"]) for item in rows
+            ],
+            "open": [_cents(item["open"]) for item in rows],
+            "high": [_cents(item["high"]) for item in rows],
+            "low": [_cents(item["low"]) for item in rows],
+            "close": [_cents(item["close"]) for item in rows],
+            "volume": [int(item["volume"] or 0) for item in rows],
+            "limit_up": [_cents(item["limit_up"]) if item.get("limit_up") else 0 for item in rows],
+            "limit_down": [_cents(item["limit_down"]) if item.get("limit_down") else 0 for item in rows],
+        }
+        (out / f"{symbol}.json").write_text(
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        written += 1
+    return written
+
 def export_ui(root: str | Path, dsn: str | None = None) -> dict[str, Any]:
     root = Path(root)
     store = DatasetStore(root)
@@ -451,11 +512,13 @@ def export_ui(root: str | Path, dsn: str | None = None) -> dict[str, Any]:
             json.dumps(series, ensure_ascii=False, separators=(",", ":")),
             encoding="utf-8",
         )
+    symbol_files = _symbol_series_files(root, names)
     return {
         "summary": str(root / "_ui_summary.json"),
         "quotes": str(root / "_quotes.json"),
         "series": str(root / "_series.json") if series else None,
         "series_symbols": len(series["symbols"]) if series else 0,
+        "series_files": symbol_files,
         "datasets": len(datasets),
         "snapshots": len(snapshots),
         "instruments": len(instruments),

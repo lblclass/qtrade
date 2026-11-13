@@ -31,8 +31,13 @@ func newTestServer(t *testing.T) *testServer {
 
 func newTestServerWithConfig(t *testing.T, cfg config.Config) *testServer {
 	t.Helper()
+	return newTestServerWithStore(t, store.NewMemory(), cfg)
+}
+
+func newTestServerWithStore(t *testing.T, memory *store.Memory, cfg config.Config) *testServer {
+	t.Helper()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	handler := api.New(store.NewMemory(), risk.NewEngine(domain.DefaultRiskLimits()), broker.Mock{}, logger, cfg)
+	handler := api.New(memory, risk.NewEngine(domain.DefaultRiskLimits()), broker.Mock{}, broker.NewSandboxIPO(memory), logger, cfg)
 	return &testServer{handler: handler}
 }
 

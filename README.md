@@ -191,7 +191,10 @@ curl -sS -X POST http://localhost:8080/api/v1/orders \
 详见 [行情数据采集与快照](docs/market-data-pipeline.md)。
 
 数据源实测结论（2026-11）：东方财富免 Token，日线全历史、1 分钟仅当日、5 分钟约 1 个月；
-BaoStock 可回补 2020 年以来的 5/15/30/60 分钟线；新浪作为备用源。
+雪球可一次返回全部历史日线（回补用）；BaoStock 可回补 2020 年以来的 5/15/30/60 分钟线；新浪作为备用源。
+
+日线维护两份数据集：`bars_1d` 不复权（控制台报价 / 落库）、`bars_1d_hfq` 后复权（回测）。
+`--backfill` 可从 1990 年把历史补齐，已覆盖的年份不会重复下载。
 
 ```bash
 cd python
@@ -199,7 +202,8 @@ pip install -e ".[data,baostock,postgres]"
 
 # 证券主数据 + 日线（默认增量）
 python -m qtrade_research.data.cli instruments --out data
-python -m qtrade_research.data.cli daily --universe all --start 2020-01-01 --out data
+python -m qtrade_research.data.cli daily --universe all --start 1990-01-01 --backfill --out data
+python -m qtrade_research.data.cli daily --universe all --start 1990-01-01 --backfill --adjust hfq --dataset bars_1d_hfq --out data
 
 # 分钟线：历史用 BaoStock，当日 1 分钟用东方财富
 python -m qtrade_research.data.cli minute --symbols 600000.SH --interval 5 --start 2020-01-01
@@ -216,7 +220,7 @@ python -m qtrade_research.data.cli catalog
 python -m qtrade_research.data.cli verify --dataset bars_1d
 
 # 用真实快照跑回测（data/ 为快照根目录）
-python -m qtrade_research.cli backtest --snapshot ../data \
+python -m qtrade_research.cli backtest --snapshot ../data --dataset bars_1d_hfq \
   --symbols 600000.SH,600519.SH,000001.SZ --start 2022-01-01
 ```
 

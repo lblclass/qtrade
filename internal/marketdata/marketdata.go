@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -45,6 +46,7 @@ type Provider struct {
 	quotes     cachedQuotes
 	instrument cachedInstruments
 	series     cachedSeries
+	symbols    map[string]cachedSymbolSeries
 }
 
 type cachedJSON struct {
@@ -314,4 +316,100 @@ func (p *Provider) LatestDailySnapshot() string {
 		}
 	}
 	return ""
+}
+
+// SymbolSeries is one stock's rolling daily window. The console charts any of
+// the 5,800+ names on demand, so each symbol gets its own small export file
+// instead of one universe-sized payload.
+type SymbolSeries struct {
+	Symbol string `json:"symbol"`
+	Name   string `json:"name"`
+	Days   int    `json:"days"`
+	SeriesSymbol
+}
+
+type cachedSymbolSeries struct {
+	modTime time.Time
+	data    *SymbolSeries
+	err     error
+}
+
+var symbolPattern = regexp.MustCompile(`^[0-9]{6}\.(SH|SZ|BJ)$`)
+
+// ErrInvalidSymbol rejects anything that is not an A-share code before it
+// reaches the filesystem.
+var ErrInvalidSymbol = errors.New("invalid symbol")
+
+func (p *Provider) SymbolSeries(symbol string, days int) (*SymbolSeries, error) {
+	if p == nil || p.root == "" {
+		return nil, errors.New("market data root is not configured")
+	}
+	symbol = strings.ToUpper(strings.TrimSpace(symbol))
+	if !symbolPattern.MatchString(symbol) {
+		return nil, ErrInvalidSymbol
+	}
+	path := filepath.Join(p.root, "ui", "series", symbol+".json")
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	p.mu.RLock()
+	cached, ok := p.symbols[symbol]
+	p.mu.RUnlock()
+	if ok && cached.data != nil && cached.modTime.Equal(info.ModTime()) {
+		return trimSeries(cached.data, days), cached.err
+	}
+
+	raw, readErr := os.ReadFile(path)
+	var data *SymbolSeries
+	if readErr == nil {
+		data = &SymbolSeries{}
+		if decodeErr := json.Unmarshal(raw, data); decodeErr != nil {
+			readErr = decodeErr
+			data = nil
+		}
+	}
+	p.mu.Lock()
+	if p.symbols == nil {
+		p.symbols = map[string]cachedSymbolSeries{}
+	}
+	p.symbols[symbol] = cachedSymbolSeries{modTime: info.ModTime(), data: data, err: readErr}
+	p.mu.Unlock()
+	if data == nil {
+		return nil, readErr
+	}
+	return trimSeries(data, days), nil
+}
+
+func trimSeries(data *SymbolSeries, days int) *SymbolSeries {
+	if days <= 0 || data.Days <= days {
+		return data
+	}
+	cut := func(values []string) []string {
+		if len(values) <= days {
+			return values
+		}
+		return values[len(values)-days:]
+	}
+	cutInts := func(values []int64) []int64 {
+		if len(values) <= days {
+			return values
+		}
+		return values[len(values)-days:]
+	}
+	return &SymbolSeries{
+		Symbol: data.Symbol,
+		Name:   data.Name,
+		Days:   days,
+		SeriesSymbol: SeriesSymbol{
+			Dates:     cut(data.Dates),
+			Open:      cutInts(data.Open),
+			High:      cutInts(data.High),
+			Low:       cutInts(data.Low),
+			Close:     cutInts(data.Close),
+			Volume:    cutInts(data.Volume),
+			LimitUp:   cutInts(data.LimitUp),
+			LimitDown: cutInts(data.LimitDown),
+		},
+	}
 }

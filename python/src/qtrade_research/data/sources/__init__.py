@@ -4,11 +4,13 @@ from .base import Capability, Instrument, MarketDataSource, SourceError, SourceR
 from .baostock_source import BaoStockSource
 from .eastmoney import EastMoneySource
 from .sina import SinaSource
+from .xueqiu import XueqiuSource
 
 SOURCES = {
     "eastmoney": EastMoneySource,
     "baostock": BaoStockSource,
     "sina": SinaSource,
+    "xueqiu": XueqiuSource,
 }
 
 __all__ = [
@@ -19,6 +21,7 @@ __all__ = [
     "Instrument",
     "MarketDataSource",
     "SinaSource",
+    "XueqiuSource",
     "SourceError",
     "SourceResponse",
 ]

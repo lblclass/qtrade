@@ -33,7 +33,8 @@ func main() {
 	}
 	riskEngine := risk.NewEngine(domain.DefaultRiskLimits())
 	gateway := broker.Mock{}
-	handler := api.New(memory, riskEngine, gateway, logger, cfg)
+	ipoAdapter := broker.NewSandboxIPO(memory)
+	handler := api.New(memory, riskEngine, gateway, ipoAdapter, logger, cfg)
 
 	server := &http.Server{
 		Addr:              cfg.Addr,

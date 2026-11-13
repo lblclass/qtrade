@@ -34,6 +34,17 @@ const STATUS_LABELS: Record<string, { label: string; tone: Tone }> = {
   sell: { label: "卖出", tone: "good" },
   market: { label: "市价", tone: "neutral" },
   limit: { label: "限价", tone: "neutral" },
+  submitted: { label: "已申购", tone: "info" },
+  won: { label: "已中签", tone: "good" },
+  lost: { label: "未中签", tone: "neutral" },
+  paid: { label: "已缴款", tone: "good" },
+  abandoned: { label: "已弃购", tone: "warn" },
+  open: { label: "申购中", tone: "good" },
+  closed: { label: "已截止", tone: "neutral" },
+  listed: { label: "已上市", tone: "info" },
+  stock: { label: "新股", tone: "info" },
+  bond: { label: "新债", tone: "warn" },
+  unconfigured: { label: "未配置", tone: "warn" },
   paper_mode: { label: "模拟", tone: "info" },
 };
 

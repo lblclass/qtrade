@@ -44,6 +44,15 @@ type Store interface {
 	ListPositions(ctx context.Context, accountID string) ([]domain.Position, error)
 	ReplacePositions(ctx context.Context, accountID string, positions []domain.Position) error
 
+	ListIPOOffers(ctx context.Context) ([]domain.IPOOffer, error)
+	GetIPOOffer(ctx context.Context, id string) (domain.IPOOffer, error)
+	UpsertIPOOffer(ctx context.Context, offer domain.IPOOffer) error
+
+	ListIPOSubscriptions(ctx context.Context, accountID string) ([]domain.IPOSubscription, error)
+	GetIPOSubscription(ctx context.Context, id string) (domain.IPOSubscription, error)
+	CreateIPOSubscription(ctx context.Context, subscription domain.IPOSubscription) error
+	UpdateIPOSubscription(ctx context.Context, subscription domain.IPOSubscription) error
+
 	AddAudit(ctx context.Context, event domain.AuditEvent) error
 	ListAudit(ctx context.Context, limit int) ([]domain.AuditEvent, error)
 

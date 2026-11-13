@@ -33,11 +33,15 @@ class CollectionRequest:
     adjust: str = "qfq"
     save_raw: bool = True
     incremental: bool = False
+    backfill: bool = False
+    dataset_name: str | None = None
     workers: int = 1
     flush_size: int = 250
 
     @property
     def dataset(self) -> str:
+        if self.dataset_name:
+            return self.dataset_name
         return "bars_1d" if self.frequency == "1d" else "bars_1m"
 
 
@@ -336,6 +340,7 @@ class Collector:
             "skipped": skipped,
             "history_truncated": truncated,
             "incremental": request.incremental,
+            "backfill": request.backfill,
             "workers": request.workers,
         }
 
@@ -356,6 +361,11 @@ def _window_start(
     last_day = date.fromisoformat(str(last))
 
     if request.frequency == "1d":
+        if request.backfill:
+            first = entry.get("start")
+            if first and date.fromisoformat(str(first)) <= request.start:
+                return None
+            return request.start
         start = last_day + timedelta(days=1)
         return start if start <= request.end else None
 
