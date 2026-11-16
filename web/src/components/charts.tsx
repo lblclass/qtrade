@@ -256,3 +256,152 @@ export function Sparkline({
     </svg>
   );
 }
+
+export type CandleBar = {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+};
+
+function movingAverage(values: number[], window: number): (number | null)[] {
+  return values.map((_, index) => {
+    if (index < window - 1) return null;
+    let sum = 0;
+    for (let cursor = index - window + 1; cursor <= index; cursor += 1) sum += values[cursor];
+    return sum / window;
+  });
+}
+
+function linePath(values: (number | null)[], xFor: (index: number) => number, yFor: (value: number) => number): string {
+  let path = "";
+  let open = false;
+  values.forEach((value, index) => {
+    if (value === null) {
+      open = false;
+      return;
+    }
+    path += `${open ? "L" : "M"}${xFor(index).toFixed(2)},${yFor(value).toFixed(2)} `;
+    open = true;
+  });
+  return path.trim();
+}
+
+export function CandleChart({ bars, height = 330 }: { bars: CandleBar[]; height?: number }) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [hover, setHover] = useState<number | null>(null);
+
+  const width = 900;
+  const padding = { left: 64, right: 16, top: 14, bottom: 22 };
+  const volumeHeight = 56;
+  const gap = 16;
+  const count = bars.length;
+  if (count === 0) return <div className="chart-empty">暂无行情数据</div>;
+
+  const priceHeight = height - padding.top - padding.bottom - volumeHeight - gap;
+  const plotWidth = width - padding.left - padding.right;
+  const step = plotWidth / count;
+  const candleWidth = Math.max(1.6, Math.min(9, step * 0.62));
+
+  let min = Math.min(...bars.map((bar) => bar.low));
+  let max = Math.max(...bars.map((bar) => bar.high));
+  const pad = (max - min) * 0.06 || Math.abs(max) * 0.02 || 1;
+  min -= pad;
+  max += pad;
+
+  const xFor = (index: number) => padding.left + step * index + step / 2;
+  const yFor = (value: number) => padding.top + priceHeight - ((value - min) / (max - min)) * priceHeight;
+  const volumeTop = padding.top + priceHeight + gap;
+  const volumeMax = Math.max(...bars.map((bar) => bar.volume)) || 1;
+  const volumeY = (value: number) => volumeTop + volumeHeight - (value / volumeMax) * volumeHeight;
+
+  const closes = bars.map((bar) => bar.close);
+  const ma5 = movingAverage(closes, 5);
+  const ma20 = movingAverage(closes, 20);
+  const ticks = Array.from({ length: 4 }, (_, index) => min + ((max - min) * index) / 3);
+  const xTicks = Array.from(new Set([0, Math.floor((count - 1) / 3), Math.floor(((count - 1) * 2) / 3), count - 1]));
+
+  const handleMove = (event: ReactPointerEvent<SVGSVGElement>) => {
+    if (!svgRef.current) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * width;
+    const index = Math.round((x - padding.left) / step - 0.5);
+    setHover(Math.min(count - 1, Math.max(0, index)));
+  };
+
+  const active = hover !== null ? bars[hover] : null;
+
+  return (
+    <div className="chart candle-chart">
+      <div className="chart-legend">
+        <span><i style={{ background: "#e8a33d" }} />MA5</span>
+        <span><i style={{ background: "#4a7dff" }} />MA20</span>
+        {active ? (
+          <span className="candle-readout mono">
+            {active.date} 开 {(active.open / 100).toFixed(2)} 高 {(active.high / 100).toFixed(2)} 低 {(active.low / 100).toFixed(2)} 收{" "}
+            <b className={active.close >= active.open ? "positive" : "negative"}>{(active.close / 100).toFixed(2)}</b>
+          </span>
+        ) : null}
+      </div>
+      <div className="chart-canvas">
+        <svg
+          ref={svgRef}
+          viewBox={`0 0 ${width} ${height}`}
+          preserveAspectRatio="none"
+          onPointerMove={handleMove}
+          onPointerLeave={() => setHover(null)}
+        >
+          {ticks.map((tick) => (
+            <g key={tick}>
+              <line x1={padding.left} x2={width - padding.right} y1={yFor(tick)} y2={yFor(tick)} className="chart-grid" />
+              <text x={padding.left - 10} y={yFor(tick) + 4} textAnchor="end" className="chart-axis">
+                {(tick / 100).toFixed(2)}
+              </text>
+            </g>
+          ))}
+          {xTicks.map((index) => (
+            <text key={index} x={xFor(index)} y={height - 6} textAnchor="middle" className="chart-axis">
+              {bars[index]?.date.slice(5)}
+            </text>
+          ))}
+          <line x1={padding.left} x2={width - padding.right} y1={volumeTop} y2={volumeTop} className="chart-grid" />
+          {bars.map((bar, index) => {
+            const up = bar.close >= bar.open;
+            const color = up ? "var(--up)" : "var(--down)";
+            const top = yFor(Math.max(bar.open, bar.close));
+            const bottom = yFor(Math.min(bar.open, bar.close));
+            return (
+              <g key={bar.date}>
+                <line x1={xFor(index)} x2={xFor(index)} y1={yFor(bar.high)} y2={yFor(bar.low)} stroke={color} strokeWidth={1} />
+                <rect
+                  x={xFor(index) - candleWidth / 2}
+                  y={top}
+                  width={candleWidth}
+                  height={Math.max(1, bottom - top)}
+                  fill={up ? "transparent" : color}
+                  stroke={color}
+                  strokeWidth={1}
+                />
+                <rect
+                  x={xFor(index) - candleWidth / 2}
+                  y={volumeY(bar.volume)}
+                  width={candleWidth}
+                  height={Math.max(1, volumeTop + volumeHeight - volumeY(bar.volume))}
+                  fill={color}
+                  opacity={0.35}
+                />
+              </g>
+            );
+          })}
+          <path d={linePath(ma5, xFor, yFor)} fill="none" stroke="#e8a33d" strokeWidth={1.2} />
+          <path d={linePath(ma20, xFor, yFor)} fill="none" stroke="#4a7dff" strokeWidth={1.2} />
+          {hover !== null ? (
+            <line x1={xFor(hover)} x2={xFor(hover)} y1={padding.top} y2={volumeTop + volumeHeight} className="chart-crosshair" />
+          ) : null}
+        </svg>
+      </div>
+    </div>
+  );
+}

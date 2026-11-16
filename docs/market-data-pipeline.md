@@ -226,3 +226,18 @@ PYTHONPATH=python/src python -m qtrade_research.data.cli daily \
 2. 复权因子尚未落到 `adj_factor` / `corporate_action`，跨除权日的涨跌停判断仍有噪音。
 3. 雪球是公开接口，没有商用授权；正式生产建议换成持牌数据源（Tushare Pro / Wind / 券商行情）。
 4. 夜间任务现在会同时维护 `bars_1d`（不复权）和 `bars_1d_hfq`（后复权）两份增量。
+### 8.7 控制台行情视图
+
+`export-ui` 除了 `_series.json`（回测/基准用的 277 只活跃标的），还会写
+`ui/series/<symbol>.json`：每只标的一份最近 250 个交易日的 OHLCV，5,852 个文件、单份约 13 KB。
+这样控制台可以按需读取任意一只票，而不必把整个 universe 塞进一个 JSON。
+
+对应接口：
+
+```
+GET /api/v1/market/series/600519.SH?days=250
+```
+
+返回 `{symbol,name,days,dates[],open[],high[],low[],close[],volume[],limit_up[],limit_down[]}`，
+价格单位是分。交易台顶部据此渲染日 K、MA5/MA20 和成交量，支持 60/120/250 日切换；
+持仓的现价、市值、浮动盈亏也改用实时 `_quotes.json` 报价，不再显示演示数据里的静态价格。

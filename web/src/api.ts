@@ -187,6 +187,19 @@ export type Quote = {
   trade_date: string;
 };
 
+export type SymbolSeries = {
+  symbol: string;
+  name: string;
+  days: number;
+  dates: string[];
+  open: number[];
+  high: number[];
+  low: number[];
+  close: number[];
+  volume: number[];
+  limit_up: number[];
+  limit_down: number[];
+};
 export type DatasetSummary = {
   key: string;
   label: string;
@@ -490,6 +503,8 @@ export const api = {
     query.set("limit", String(params.limit ?? 30));
     return get<ListResponse<Quote> & { available: boolean }>(`/api/v1/market/quotes?${query}`);
   },
+  series: (symbol: string, days = 250) =>
+    get<SymbolSeries>(`/api/v1/market/series/${encodeURIComponent(symbol)}?days=${days}`),
 };
 
 export function errorMessage(error: unknown): string {

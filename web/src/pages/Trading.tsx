@@ -10,12 +10,14 @@ import {
   type Quote,
   type RiskLimits,
   type Strategy,
+  type SymbolSeries,
   type Violation,
 } from "../api";
 import { Badge, ErrorBlock, Field, PageHeader, Panel, Segmented, Spinner, useToast } from "../components/ui";
 import { Icon } from "../components/icons";
 import { useRefresh } from "../lib/refresh";
 import { useAsync } from "../lib/useAsync";
+import { CandleChart, type CandleBar } from "../components/charts";
 import {
   formatCNY,
   formatCompactCNY,
@@ -35,6 +37,12 @@ type TradeData = {
   risk: RiskLimits;
   strategies: Strategy[];
 };
+
+const RANGES: { value: "60" | "120" | "250"; label: string }[] = [
+  { value: "60", label: "60日" },
+  { value: "120", label: "120日" },
+  { value: "250", label: "250日" },
+] ;
 
 const ORDER_FILTERS = [
   { value: "all", label: "全部" },
@@ -61,6 +69,10 @@ export function TradingPage({
   const [suggestions, setSuggestions] = useState<Quote[]>([]);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [quote, setQuote] = useState<Quote | null>(null);
+  const [positionQuotes, setPositionQuotes] = useState<Record<string, Quote>>({});
+  const [series, setSeries] = useState<SymbolSeries | null>(null);
+  const [seriesError, setSeriesError] = useState<string | null>(null);
+  const [range, setRange] = useState<"60" | "120" | "250">("120");
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [orderType, setOrderType] = useState<"market" | "limit">("limit");
   const [quantity, setQuantity] = useState("100");
@@ -98,6 +110,9 @@ export function TradingPage({
   const account = (state.data?.accounts ?? []).find((item) => item.id === selected?.account_id) ?? (state.data?.accounts ?? [])[0];
   const positions = (state.data?.positions ?? []).filter((item) => item.account_id === account?.id);
   const position = positions.find((item) => item.symbol === symbol);
+
+  const priceOf = (item: Position) => positionQuotes[item.symbol]?.close_cents ?? item.market_price_cents;
+  const positionKey = positions.map((item) => item.symbol).sort().join(",");
 
   useEffect(() => {
     if (!deploymentId && running[0]) setDeploymentId(running[0].id);
@@ -156,6 +171,51 @@ export function TradingPage({
       window.clearTimeout(timer);
     };
   }, [symbol, token]);
+
+  useEffect(() => {
+    if (!positionKey) {
+      setPositionQuotes({});
+      return;
+    }
+    let active = true;
+    void api.quotes({ symbols: positionKey, limit: 200 })
+      .then((response) => {
+        if (!active) return;
+        const next: Record<string, Quote> = {};
+        for (const item of response.items) next[item.symbol] = item;
+        setPositionQuotes(next);
+      })
+      .catch(() => { if (active) setPositionQuotes({}); });
+    return () => {
+      active = false;
+    };
+  }, [positionKey, token]);
+  useEffect(() => {
+    let active = true;
+    setSeriesError(null);
+    void api.series(symbol, Number(range))
+      .then((response) => { if (active) setSeries(response); })
+      .catch((error) => {
+        if (!active) return;
+        setSeries(null);
+        setSeriesError(errorMessage(error));
+      });
+    return () => {
+      active = false;
+    };
+  }, [symbol, range, token]);
+
+  const candles = useMemo<CandleBar[]>(() => {
+    if (!series) return [];
+    return series.dates.map((date, index) => ({
+      date,
+      open: series.open[index] ?? 0,
+      high: series.high[index] ?? 0,
+      low: series.low[index] ?? 0,
+      close: series.close[index] ?? 0,
+      volume: series.volume[index] ?? 0,
+    }));
+  }, [series]);
 
   const selectQuote = (item: Quote) => {
     setSymbol(item.symbol);
@@ -271,7 +331,7 @@ export function TradingPage({
         </div>
         <div className="kpi kpi-violet">
           <div className="kpi-top"><span className="kpi-label">持仓市值</span><Icon name="layers" size={16} /></div>
-          <strong className="kpi-value">{formatCompactCNY(positions.reduce((sum, item) => sum + item.quantity * item.market_price_cents, 0))}</strong>
+          <strong className="kpi-value">{formatCompactCNY(positions.reduce((sum, item) => sum + item.quantity * priceOf(item), 0))}</strong>
           <div className="kpi-foot"><span className="kpi-hint">{positions.length} 个持仓</span></div>
         </div>
         <div className="kpi kpi-amber">
@@ -281,6 +341,22 @@ export function TradingPage({
         </div>
       </section>
 
+      <section className="chart-panel">
+        <Panel
+          title={`行情走势 · ${quote?.name ?? symbol}`}
+          subtitle={`${series?.days ?? 0} 个交易日 · 日线不复权 · 本地落库数据`}
+          actions={<Segmented value={range} options={RANGES} onChange={setRange} />}
+          flush
+        >
+          {seriesError ? (
+            <p className="empty">{seriesError}</p>
+          ) : candles.length ? (
+            <CandleChart bars={candles} height={320} />
+          ) : (
+            <div className="chart-empty">加载中…</div>
+          )}
+        </Panel>
+      </section>
       <section className="trade-layout">
         <Panel
           title="下单"
@@ -429,16 +505,16 @@ export function TradingPage({
             <thead><tr><th>代码</th><th className="right">持仓</th><th className="right">可用</th><th className="right">成本价</th><th className="right">现价</th><th className="right">市值</th><th className="right">浮动盈亏</th><th className="right">收益率</th></tr></thead>
             <tbody>
               {positions.length ? positions.map((item) => {
-                const pnl = (item.market_price_cents - item.avg_cost_cents) * item.quantity;
-                const pnlBps = item.avg_cost_cents ? ((item.market_price_cents - item.avg_cost_cents) * 10_000) / item.avg_cost_cents : 0;
+                const pnl = (priceOf(item) - item.avg_cost_cents) * item.quantity;
+                const pnlBps = item.avg_cost_cents ? ((priceOf(item) - item.avg_cost_cents) * 10_000) / item.avg_cost_cents : 0;
                 return (
                   <tr key={item.symbol} className="clickable" onClick={() => { setSymbol(item.symbol); setSymbolDraft(item.symbol); }}>
                     <td className="mono">{item.symbol}</td>
                     <td className="right mono">{formatNumber(item.quantity)}</td>
                     <td className="right mono">{formatNumber(item.available_quantity)}</td>
                     <td className="right mono">{formatPrice(item.avg_cost_cents)}</td>
-                    <td className="right mono">{formatPrice(item.market_price_cents)}</td>
-                    <td className="right mono">{formatCNY(item.quantity * item.market_price_cents)}</td>
+                    <td className="right mono">{formatPrice(priceOf(item))}</td>
+                    <td className="right mono">{formatCNY(item.quantity * priceOf(item))}</td>
                     <td className={`right mono ${trendClass(pnl)}`}>{formatCNY(pnl)}</td>
                     <td className={`right mono ${trendClass(pnlBps)}`}>{formatSignedBPS(pnlBps)}</td>
                   </tr>

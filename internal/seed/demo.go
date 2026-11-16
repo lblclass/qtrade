@@ -143,9 +143,9 @@ func Demo(ctx context.Context, st store.Store) error {
 	}
 
 	positions := []domain.Position{
-		{AccountID: demoAccountID, Symbol: "600519.SH", Quantity: 100, AvailableQuantity: 100, AvgCostCents: 165_000, MarketPriceCents: 168_200},
-		{AccountID: demoAccountID, Symbol: "000858.SZ", Quantity: 1000, AvailableQuantity: 1000, AvgCostCents: 13_550, MarketPriceCents: 13_920},
-		{AccountID: demoAccountID, Symbol: "300750.SZ", Quantity: 500, AvailableQuantity: 500, AvgCostCents: 18_240, MarketPriceCents: 18_610},
+		{AccountID: demoAccountID, Symbol: "600519.SH", Quantity: 100, AvailableQuantity: 100, AvgCostCents: 138_000, MarketPriceCents: 142_795},
+		{AccountID: demoAccountID, Symbol: "000858.SZ", Quantity: 1000, AvailableQuantity: 1000, AvgCostCents: 7_120, MarketPriceCents: 7_311},
+		{AccountID: demoAccountID, Symbol: "300750.SZ", Quantity: 500, AvailableQuantity: 500, AvgCostCents: 23_350, MarketPriceCents: 24_029},
 	}
 	if err := st.ReplacePositions(ctx, demoAccountID, positions); err != nil {
 		return err
@@ -159,11 +159,11 @@ func Demo(ctx context.Context, st store.Store) error {
 	}
 
 	orders := []domain.Order{
-		{ID: "ord_demo_0001", ClientOrderID: "web-demo-0001", DeploymentID: "dep_demo_momentum_live", AccountID: demoAccountID, Symbol: "600519.SH", Side: domain.SideBuy, OrderType: domain.OrderLimit, Quantity: 100, FilledQuantity: 100, PriceCents: 168_200, Status: domain.OrderFilled, CreatedAt: at(5), UpdatedAt: at(5)},
-		{ID: "ord_demo_0002", ClientOrderID: "web-demo-0002", DeploymentID: "dep_demo_momentum_live", AccountID: demoAccountID, Symbol: "000858.SZ", Side: domain.SideBuy, OrderType: domain.OrderLimit, Quantity: 1000, FilledQuantity: 1000, PriceCents: 13_550, Status: domain.OrderFilled, CreatedAt: at(5), UpdatedAt: at(5)},
+		{ID: "ord_demo_0001", ClientOrderID: "web-demo-0001", DeploymentID: "dep_demo_momentum_live", AccountID: demoAccountID, Symbol: "600519.SH", Side: domain.SideBuy, OrderType: domain.OrderLimit, Quantity: 100, FilledQuantity: 100, PriceCents: 138_000, Status: domain.OrderFilled, CreatedAt: at(5), UpdatedAt: at(5)},
+		{ID: "ord_demo_0002", ClientOrderID: "web-demo-0002", DeploymentID: "dep_demo_momentum_live", AccountID: demoAccountID, Symbol: "000858.SZ", Side: domain.SideBuy, OrderType: domain.OrderLimit, Quantity: 1000, FilledQuantity: 1000, PriceCents: 7_120, Status: domain.OrderFilled, CreatedAt: at(5), UpdatedAt: at(5)},
 		{ID: "ord_demo_0003", ClientOrderID: "web-demo-0003", DeploymentID: "dep_demo_multifactor_paper", AccountID: demoAccountID, Symbol: "601318.SH", Side: domain.SideBuy, OrderType: domain.OrderLimit, Quantity: 1000, FilledQuantity: 400, PriceCents: 4_520, Status: domain.OrderPartiallyFilled, CreatedAt: at(1), UpdatedAt: at(1)},
-		{ID: "ord_demo_0004", ClientOrderID: "web-demo-0004", DeploymentID: "dep_demo_multifactor_paper", AccountID: demoAccountID, Symbol: "300750.SZ", Side: domain.SideBuy, OrderType: domain.OrderLimit, Quantity: 500, FilledQuantity: 0, PriceCents: 18_610, Status: domain.OrderAccepted, CreatedAt: at(1), UpdatedAt: at(1)},
-		{ID: "ord_demo_0005", ClientOrderID: "web-demo-0005", DeploymentID: "dep_demo_momentum_live", AccountID: demoAccountID, Symbol: "600519.SH", Side: domain.SideSell, OrderType: domain.OrderLimit, Quantity: 100, FilledQuantity: 0, PriceCents: 170_000, Status: domain.OrderCanceled, CreatedAt: at(3), UpdatedAt: at(3)},
+		{ID: "ord_demo_0004", ClientOrderID: "web-demo-0004", DeploymentID: "dep_demo_multifactor_paper", AccountID: demoAccountID, Symbol: "300750.SZ", Side: domain.SideBuy, OrderType: domain.OrderLimit, Quantity: 500, FilledQuantity: 0, PriceCents: 23_350, Status: domain.OrderAccepted, CreatedAt: at(1), UpdatedAt: at(1)},
+		{ID: "ord_demo_0005", ClientOrderID: "web-demo-0005", DeploymentID: "dep_demo_momentum_live", AccountID: demoAccountID, Symbol: "600519.SH", Side: domain.SideSell, OrderType: domain.OrderLimit, Quantity: 100, FilledQuantity: 0, PriceCents: 145_000, Status: domain.OrderCanceled, CreatedAt: at(3), UpdatedAt: at(3)},
 		{ID: "ord_demo_0006", ClientOrderID: "web-demo-0006", DeploymentID: "dep_demo_momentum_live", AccountID: demoAccountID, Symbol: "000001.SZ", Side: domain.SideSell, OrderType: domain.OrderMarket, Quantity: 1000, PriceCents: 1_150, Status: domain.OrderRejected, RejectReason: "risk_rejected", CreatedAt: at(2), UpdatedAt: at(2)},
 	}
 	for _, order := range orders {

@@ -85,7 +85,12 @@ func queryLimit(r *http.Request, fallback, maximum int) int {
 
 func (s *Server) marketSeries(w http.ResponseWriter, r *http.Request) {
 	symbol := r.PathValue("symbol")
-	days := queryLimit(r, 0, 2000)
+	days := 0
+	if raw := r.URL.Query().Get("days"); raw != "" {
+		if parsed, parseErr := strconv.Atoi(raw); parseErr == nil && parsed > 0 {
+			days = min(parsed, 2000)
+		}
+	}
 	data, err := s.market.SymbolSeries(symbol, days)
 	if err != nil {
 		status := http.StatusNotFound
